@@ -1,109 +1,77 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleLogoClick = (e) => {
-    e.preventDefault(); // Prevent default Link behavior
-    window.location.href = '/'; // Force page refresh and redirect to home
-  };
-
   return (
-    <nav className="bg-gradient-to-r from-blue-900 to-indigo-900 shadow-xl w-full sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
-          {/* Logo */}
-          <Link
-            to="/"
-            onClick={handleLogoClick}
-            className="flex items-center space-x-2"
-            aria-label="Homepage"
-          >
-            <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-200 to-teal-200 bg-clip-text text-transparent hover:from-teal-300 hover:to-blue-300 transition-all duration-500">
-              visafreetraveler.com
+    <nav className="bg-white shadow-sm fixed w-full z-10 border-b border-gray-100">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          <div className="flex-shrink-0 flex items-center">
+            <span className="text-xl font-bold text-gray-700 transition-all duration-300 hover:text-gray-900 cursor-pointer transform hover:scale-105">
+              SaaS Multiples
             </span>
-          </Link>
-
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-10">
-            <NavLink to="/about" label="About" />
-            <NavLink to="/contact" label="Contact" />
           </div>
-
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 rounded-lg text-gray-200 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-            aria-label="Toggle navigation"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          <div className="hidden md:flex md:items-center md:space-x-8">
+            <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:bg-gray-100">
+              Home
+            </a>
+            <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:bg-gray-100">
+              Features
+            </a>
+            <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:bg-gray-100">
+              Pricing
+            </a>
+            <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:bg-gray-100">
+              About
+            </a>
+            <button className="ml-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-700 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200 transform hover:scale-105">
+              Sign Up
+            </button>
+          </div>
+          <div className="flex md:hidden items-center">
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gray-500"
+              aria-expanded="false"
             >
-              {isOpen ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+              <span className="sr-only">Open main menu</span>
+              {!isOpen ? (
+                <svg className="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
               ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
+                <svg className="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               )}
-            </svg>
-          </button>
-        </div>
-
-        {/* Mobile Menu */}
-        <div className={`md:hidden ${isOpen ? 'block' : 'hidden'} pb-4`}>
-          <div className="px-2 pt-2 space-y-2 bg-white rounded-lg shadow-lg">
-            <MobileNavLink
-              to="/about"
-              label="About"
-              onClick={() => setIsOpen(false)}
-            />
-            <MobileNavLink
-              to="/contact"
-              label="Contact"
-              onClick={() => setIsOpen(false)}
-            />
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* Mobile menu, show/hide based on menu state */}
+      <div className={`md:hidden ${isOpen ? 'block' : 'hidden'}`}>
+        <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 shadow-inner bg-gray-50 animate-fadeIn">
+          <a href="#" className="text-gray-600 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all duration-200">
+            Home
+          </a>
+          <a href="#" className="text-gray-600 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all duration-200">
+            Features
+          </a>
+          <a href="#" className="text-gray-600 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all duration-200">
+            Pricing
+          </a>
+          <a href="#" className="text-gray-600 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all duration-200">
+            About
+          </a>
+          <button className="mt-2 w-full flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-700 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200">
+            Sign Up
+          </button>
         </div>
       </div>
     </nav>
   );
 };
-
-// Reusable NavLink component for desktop
-const NavLink = ({ to, label }) => (
-  <Link
-    to={to}
-    className="relative text-gray-200 hover:text-white font-medium group transition-colors duration-300"
-    aria-label={`${label} page`}
-  >
-    {label}
-    <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-blue-300 transition-all group-hover:w-full"></span>
-  </Link>
-);
-
-// Mobile-specific NavLink component
-const MobileNavLink = ({ to, label, onClick }) => (
-  <Link
-    to={to}
-    onClick={onClick}
-    className="block px-4 py-3 text-gray-800 hover:bg-blue-50 rounded-md transition-colors duration-200 font-medium"
-    aria-label={`${label} page`}
-  >
-    {label}
-  </Link>
-);
 
 export default Navbar;
