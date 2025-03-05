@@ -1,6 +1,8 @@
-
 // src/services/api.js
-const API_URL = 'http://localhost:5000/api'||'https://saas-backend-one.vercel.app';
+// Dynamically determine API URL based on environment
+const API_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://saas-backend-one.vercel.app/api'
+  : 'http://localhost:5000/api';
 
 export const fetchAllCompanies = async () => {
   try {
