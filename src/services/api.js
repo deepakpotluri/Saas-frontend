@@ -1,7 +1,8 @@
+// Create this as a separate file in your frontend project, e.g., services/api.js
 
-const API_URL = window.location.hostname === 'localhost' 
+const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:5000/api'
-  : 'https://saas-backend-three.vercel.app/api'; 
+  : 'https://saas-backend-three.vercel.app/api';
 
 export const fetchAllCompanies = async () => {
   try {
