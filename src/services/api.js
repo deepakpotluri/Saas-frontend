@@ -1,7 +1,7 @@
 
 const API_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:5000/api'
-  : 'https://saas-backend-one.vercel.app/api'; 
+  : 'https://saas-backend-three.vercel.app/api'; 
 
 export const fetchAllCompanies = async () => {
   try {
