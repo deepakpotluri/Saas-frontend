@@ -1,65 +1,108 @@
-// Create this as a separate file in your frontend project, e.g., services/api.js
-
 const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:5000/api'
   : 'https://saas-backend-three.vercel.app/api';
 
-export const fetchAllCompanies = async () => {
+// Helper function to handle API responses consistently
+const handleApiResponse = async (response) => {
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorText}`);
+  }
+  
   try {
-    const response = await fetch(`${API_URL}/companies`);
+    const data = await response.json();
     
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+    // Basic validation of the response
+    if (data === null || data === undefined) {
+      throw new Error('Invalid response: Empty data received from API');
     }
     
-    return await response.json();
+    return data;
   } catch (error) {
-    console.error('Error fetching all companies:', error);
+    throw new Error('Failed to parse API response');
+  }
+};
+
+export const fetchCountries = async () => {
+  try {
+    const response = await fetch(`${API_URL}/countries`);
+    const data = await handleApiResponse(response);
+    
+    // Ensure countries is an array
+    if (!Array.isArray(data)) {
+      return [];
+    }
+    
+    return data;
+  } catch (error) {
     throw error;
   }
 };
 
-export const fetchAllRegions = async () => {
+export const fetchCountryData = async (countryName) => {
+  if (!countryName) {
+    throw new Error('Country name is required');
+  }
+  
   try {
-    const response = await fetch(`${API_URL}/regions`);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-    
-    return await response.json();
+    const response = await fetch(`${API_URL}/country/${encodeURIComponent(countryName)}`);
+    return await handleApiResponse(response);
   } catch (error) {
-    console.error('Error fetching all regions:', error);
     throw error;
   }
 };
 
-export const fetchUSACompanies = async () => {
+export const fetchUSACategories = async () => {
   try {
-    const response = await fetch(`${API_URL}/companies/usa`);
+    const response = await fetch(`${API_URL}/categories/usa`);
+    const data = await handleApiResponse(response);
     
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+    // Ensure categories is an array
+    if (!Array.isArray(data)) {
+      return [];
     }
     
-    return await response.json();
+    return data;
   } catch (error) {
-    console.error('Error fetching USA companies:', error);
     throw error;
   }
 };
 
-export const fetchRegionCompanies = async (regionName) => {
+export const fetchCompanies = async (countryName, category = null) => {
+  if (!countryName) {
+    throw new Error('Country name is required');
+  }
+  
   try {
-    const response = await fetch(`${API_URL}/companies/region/${regionName}`);
+    let url = `${API_URL}/companies/${encodeURIComponent(countryName)}`;
     
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+    if (category) {
+      url += `?category=${encodeURIComponent(category)}`;
     }
     
-    return await response.json();
+    const response = await fetch(url);
+    const data = await handleApiResponse(response);
+    
+    // Basic validation of the company data structure
+    if (!data.companies) {
+      return { companies: [], exchangeName: data.exchangeName || 'Unknown Exchange' };
+    }
+    
+    return data;
   } catch (error) {
-    console.error(`Error fetching companies for region ${regionName}:`, error);
+    throw error;
+  }
+};
+
+export const fetchCompanyFinancials = async (ticker) => {
+  if (!ticker) {
+    throw new Error('Ticker is required');
+  }
+  
+  try {
+    const response = await fetch(`${API_URL}/financials/${encodeURIComponent(ticker)}`);
+    return await handleApiResponse(response);
+  } catch (error) {
     throw error;
   }
 };
