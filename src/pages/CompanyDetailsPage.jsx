@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { fetchCompanyFinancials } from '../services/api';
+import { trackFinancialDataLoaded } from '../utils/analytics';
 
 const CompanyDetailsPage = () => {
   const { ticker } = useParams();
@@ -26,6 +27,21 @@ const CompanyDetailsPage = () => {
         
         const data = await fetchCompanyFinancials(ticker);
         setFinancialData(data);
+        
+        // Track that financial data was successfully loaded
+        if (window.gtag) {
+          window.gtag('event', 'view_company_details', {
+            'event_category': 'User Engagement',
+            'event_label': data.name || company?.name || ticker,
+            'company_ticker': ticker,
+            'company_focus': data.focus || company?.focus || 'N/A'
+          });
+          
+          // Also track using our utility if available
+          if (typeof trackFinancialDataLoaded === 'function') {
+            trackFinancialDataLoaded(ticker, data.name || company?.name);
+          }
+        }
         
         // If we don't have the company info from navigation state
         if (!company) {
@@ -69,6 +85,14 @@ const CompanyDetailsPage = () => {
       } catch (err) {
         console.error(`Error loading data for ${ticker}:`, err);
         setError(`Failed to load data for ${ticker}`);
+        
+        // Track error in Google Analytics
+        if (window.gtag) {
+          window.gtag('event', 'data_load_error', {
+            'event_category': 'Error',
+            'event_label': `${ticker}: ${err.message || 'Unknown error'}`
+          });
+        }
       } finally {
         setLoading(false);
       }

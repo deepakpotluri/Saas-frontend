@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchCountries } from '../services/api';
+import { trackCountryFilter } from '../utils/analytics'; // Import the analytics utility
 
 const CountryDropdown = ({ onCountrySelect, initialValue = '' }) => {
   const [countries, setCountries] = useState([]);
@@ -38,6 +39,12 @@ const CountryDropdown = ({ onCountrySelect, initialValue = '' }) => {
   const handleChange = (e) => {
     const country = e.target.value;
     setSelectedCountry(country);
+    
+    // Track the country selection in Google Analytics
+    if (country) {
+      trackCountryFilter(country);
+    }
+    
     onCountrySelect(country);
   };
   

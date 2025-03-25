@@ -13,15 +13,7 @@ const Navbar = () => {
             </span>
           </div>
           <div className="hidden md:flex md:items-center md:space-x-8">
-            <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:bg-gray-100">
-              Home
-            </a>
-            <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:bg-gray-100">
-              Features
-            </a>
-            <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:bg-gray-100">
-              Pricing
-            </a>
+           
             <a href="#" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:bg-gray-100">
               About
             </a>
@@ -53,15 +45,7 @@ const Navbar = () => {
       {/* Mobile menu, show/hide based on menu state */}
       <div className={`md:hidden ${isOpen ? 'block' : 'hidden'}`}>
         <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 shadow-inner bg-gray-50 animate-fadeIn">
-          <a href="#" className="text-gray-600 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all duration-200">
-            Home
-          </a>
-          <a href="#" className="text-gray-600 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all duration-200">
-            Features
-          </a>
-          <a href="#" className="text-gray-600 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all duration-200">
-            Pricing
-          </a>
+          
           <a href="#" className="text-gray-600 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all duration-200">
             About
           </a>

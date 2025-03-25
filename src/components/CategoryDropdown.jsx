@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchUSACategories } from '../services/api';
+import { trackCategoryFilter } from '../utils/analytics'; // Import the analytics utility
 
 const CategoryDropdown = ({ onCategorySelect, initialValue = 'All' }) => {
   const [categories, setCategories] = useState(['All']);
@@ -41,6 +42,10 @@ const CategoryDropdown = ({ onCategorySelect, initialValue = 'All' }) => {
   const handleChange = (e) => {
     const category = e.target.value;
     setSelectedCategory(category);
+    
+    // Track the category selection in Google Analytics
+    trackCategoryFilter(category);
+    
     onCategorySelect(category);
   };
   

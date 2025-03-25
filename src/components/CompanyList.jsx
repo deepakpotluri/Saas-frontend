@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { trackCompanyView } from '../utils/analytics'; // Import the analytics utility
 
 const CompanyList = ({ companies, exchangeName }) => {
   const navigate = useNavigate();
@@ -23,6 +24,12 @@ const CompanyList = ({ companies, exchangeName }) => {
   };
   
   const handleCompanyClick = (company) => {
+    // Track the event using our analytics utility
+    trackCompanyView({
+      ...company,
+      exchange: exchangeName // Include the exchange name for better analytics data
+    });
+    
     // Navigate to the company details page with the company data
     navigate(`/company/${company.ticker}`, { state: { company } });
   };
