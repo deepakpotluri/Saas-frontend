@@ -13,6 +13,12 @@ const CompanyDetailsPage = () => {
   const [company, setCompany] = useState(location.state?.company || null);
   const [financialData, setFinancialData] = useState(null);
   const [yearlyData, setYearlyData] = useState([]);
+  const [growthData, setGrowthData] = useState({
+    revenueGrowth: null,
+    grossProfitGrowth: null,
+    netIncomeGrowth: null
+  });
+  const [latestTwoYearsData, setLatestTwoYearsData] = useState([]);
   
   useEffect(() => {
     const loadCompanyData = async () => {
@@ -56,7 +62,28 @@ const CompanyDetailsPage = () => {
         
         // Process yearly data for display
         if (data.income_statement && data.income_statement.length > 0) {
-          const processedYearlyData = data.income_statement.map(statement => {
+          // Sort statements by date for calculations
+          const sortedStatements = [...data.income_statement].sort(
+            (a, b) => new Date(a.date) - new Date(b.date)
+          );
+          
+          // Calculate YoY growth for each year
+          const processedYearlyData = sortedStatements.map((statement, index) => {
+            const prevYear = index > 0 ? sortedStatements[index - 1] : null;
+            
+            // Calculate YoY growth rates
+            const revenueGrowth = prevYear && prevYear.revenue 
+              ? ((statement.revenue - prevYear.revenue) / prevYear.revenue * 100).toFixed(2)
+              : null;
+              
+            const grossProfitGrowth = prevYear && prevYear.grossProfit 
+              ? ((statement.grossProfit - prevYear.grossProfit) / prevYear.grossProfit * 100).toFixed(2)
+              : null;
+              
+            const netIncomeGrowth = prevYear && prevYear.netIncome 
+              ? ((statement.netIncome - prevYear.netIncome) / prevYear.netIncome * 100).toFixed(2)
+              : null;
+            
             const relevantMarketCap = data.market_cap && data.market_cap.length > 0 
               ? findClosestMarketCap(statement.date, data.market_cap)
               : null;
@@ -65,8 +92,11 @@ const CompanyDetailsPage = () => {
               year: statement.calendarYear,
               date: statement.date,
               revenue: statement.revenue,
+              revenueGrowth,
               grossProfit: statement.grossProfit,
+              grossProfitGrowth,
               netIncome: statement.netIncome,
+              netIncomeGrowth,
               eps: statement.epsdiluted,
               marketCap: relevantMarketCap ? relevantMarketCap.marketCap : null,
               marketCapToNetIncomeMultiple: relevantMarketCap && statement.netIncome 
@@ -78,9 +108,22 @@ const CompanyDetailsPage = () => {
             };
           });
           
-          // Sort by date descending
+          // Sort by date descending for display
           processedYearlyData.sort((a, b) => new Date(b.date) - new Date(a.date));
           setYearlyData(processedYearlyData);
+          
+          // Get the latest year's growth for the summary section
+          if (processedYearlyData.length > 0) {
+            const latestData = processedYearlyData[0];
+            setGrowthData({
+              revenueGrowth: latestData.revenueGrowth,
+              grossProfitGrowth: latestData.grossProfitGrowth,
+              netIncomeGrowth: latestData.netIncomeGrowth
+            });
+            
+            // Extract latest two years data for the YoY comparison
+            setLatestTwoYearsData(processedYearlyData.slice(0, 2));
+          }
         }
       } catch (err) {
         console.error(`Error loading data for ${ticker}:`, err);
@@ -124,10 +167,34 @@ const CompanyDetailsPage = () => {
       return null;
     }
     
+    // Sort income statements for YoY calculations - by date ascending
+    const sortedStatements = [...data.income_statement].sort(
+      (a, b) => new Date(a.date) - new Date(b.date)
+    );
+    
     // Get latest income statement
-    const latestIncomeStatement = data.income_statement.sort((a, b) => 
-      new Date(b.date) - new Date(a.date)
-    )[0];
+    const latestIncomeStatement = sortedStatements[sortedStatements.length - 1];
+    
+    // Get previous year's statement for growth calculation
+    const previousYearStatement = sortedStatements.length > 1 
+      ? sortedStatements[sortedStatements.length - 2]
+      : null;
+    
+    // Calculate YoY growth rates - ensure we have real values and avoid division by zero
+    let revenueGrowth = null;
+    if (previousYearStatement && previousYearStatement.revenue && previousYearStatement.revenue !== 0) {
+      revenueGrowth = ((latestIncomeStatement.revenue - previousYearStatement.revenue) / Math.abs(previousYearStatement.revenue) * 100).toFixed(2);
+    }
+      
+    let grossProfitGrowth = null;
+    if (previousYearStatement && previousYearStatement.grossProfit && previousYearStatement.grossProfit !== 0) {
+      grossProfitGrowth = ((latestIncomeStatement.grossProfit - previousYearStatement.grossProfit) / Math.abs(previousYearStatement.grossProfit) * 100).toFixed(2);
+    }
+      
+    let netIncomeGrowth = null;
+    if (previousYearStatement && previousYearStatement.netIncome && previousYearStatement.netIncome !== 0) {
+      netIncomeGrowth = ((latestIncomeStatement.netIncome - previousYearStatement.netIncome) / Math.abs(previousYearStatement.netIncome) * 100).toFixed(2);
+    }
     
     // Get latest market cap
     let latestMarketCap = null;
@@ -141,11 +208,16 @@ const CompanyDetailsPage = () => {
     const marketCap = latestMarketCap ? latestMarketCap.marketCap : null;
     const netIncome = latestIncomeStatement ? latestIncomeStatement.netIncome : null;
     const grossProfit = latestIncomeStatement ? latestIncomeStatement.grossProfit : null;
+    const revenue = latestIncomeStatement ? latestIncomeStatement.revenue : null;
     
     return {
       marketCap,
+      revenue,
+      revenueGrowth,
       netIncome,
+      netIncomeGrowth,
       grossProfit,
+      grossProfitGrowth,
       marketCapToNetIncomeMultiple: (marketCap && netIncome) ? (marketCap / netIncome).toFixed(2) : null,
       marketCapToGrossProfitMultiple: (marketCap && grossProfit) ? (marketCap / grossProfit).toFixed(2) : null,
       year: latestIncomeStatement ? latestIncomeStatement.calendarYear : null
@@ -168,6 +240,23 @@ const CompanyDetailsPage = () => {
     }
     
     return `$${value.toLocaleString()}`;
+  };
+
+  const formatGrowthRate = (value) => {
+    // Check if value is null, undefined, or NaN
+    if (value === null || value === undefined || isNaN(parseFloat(value))) {
+      return 'N/A';
+    }
+    
+    const numericValue = parseFloat(value);
+    const color = numericValue > 0 ? 'text-green-600' : numericValue < 0 ? 'text-red-600' : 'text-gray-600';
+    const prefix = numericValue > 0 ? '+' : '';
+    
+    return (
+      <span className={color}>
+        {prefix}{numericValue}%
+      </span>
+    );
   };
   
   const formatMultiple = (value) => {
@@ -256,22 +345,84 @@ const CompanyDetailsPage = () => {
           <p className="text-gray-600 mt-2">{company.focus}</p>
         </div>
         
+        {/* Latest Revenue */}
+        {company.financials && company.financials.revenue && (
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+            <h2 className="text-xl font-semibold mb-2">Latest Revenue</h2>
+            <p className="text-3xl font-bold text-blue-800">{formatCurrency(company.financials.revenue)}</p>
+            {company.financials.revenueGrowth && (
+              <p className="mt-1">
+                YoY Growth: {formatGrowthRate(company.financials.revenueGrowth)}
+              </p>
+            )}
+          </div>
+        )}
+      
         {company.financials && (
           <div className="space-y-8">
             <div>
               <h2 className="text-xl font-semibold mb-4">Key Financial Metrics ({company.financials.year || 'N/A'})</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Revenue with YoY Growth */}
+                <div className="bg-indigo-50 p-4 rounded-lg">
+                  <p className="text-gray-600">Revenue</p>
+                  <p className="text-2xl font-bold">{formatCurrency(company.financials.revenue || yearlyData[0]?.revenue || 'N/A')}</p>
+                  <p className="text-sm mt-1">
+                    YoY Growth: {formatGrowthRate(company.financials.revenueGrowth || yearlyData[0]?.revenueGrowth)}
+                  </p>
+                </div>
+                
+                {/* Market Cap */}
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <p className="text-gray-600">Market Cap</p>
-                  <p className="text-2xl font-bold">{formatCurrency(company.financials.marketCap)}</p>
+                  <p className="text-2xl font-bold">{formatCurrency(company.financials.marketCap || yearlyData[0]?.marketCap || 'N/A')}</p>
                 </div>
+                
+                {/* Gross Profit with YoY Growth */}
                 <div className="bg-green-50 p-4 rounded-lg">
                   <p className="text-gray-600">Gross Profit</p>
-                  <p className="text-2xl font-bold">{formatCurrency(company.financials.grossProfit)}</p>
+                  <p className="text-2xl font-bold">{formatCurrency(company.financials.grossProfit || yearlyData[0]?.grossProfit || 'N/A')}</p>
+                  <p className="text-sm mt-1">
+                    YoY Growth: {formatGrowthRate(company.financials.grossProfitGrowth || yearlyData[0]?.grossProfitGrowth)}
+                  </p>
                 </div>
+                
+                {/* Net Income with YoY Growth */}
                 <div className="bg-purple-50 p-4 rounded-lg">
                   <p className="text-gray-600">Net Income</p>
-                  <p className="text-2xl font-bold">{formatCurrency(company.financials.netIncome)}</p>
+                  <p className="text-2xl font-bold">{formatCurrency(company.financials.netIncome || yearlyData[0]?.netIncome || 'N/A')}</p>
+                  <p className="text-sm mt-1">
+                    YoY Growth: {formatGrowthRate(company.financials.netIncomeGrowth || yearlyData[0]?.netIncomeGrowth)}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Growth Metrics Summary */}
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Growth Summary</h2>
+              <div className="bg-gradient-to-r from-blue-50 to-green-50 p-4 rounded-lg">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="text-center">
+                    <p className="text-gray-700 font-medium">Revenue Growth</p>
+                    <p className="text-3xl font-bold mt-2">
+                      {formatGrowthRate(company.financials.revenueGrowth || yearlyData[0]?.revenueGrowth)}
+                    </p>
+                  </div>
+                  
+                  <div className="text-center">
+                    <p className="text-gray-700 font-medium">Gross Profit Growth</p>
+                    <p className="text-3xl font-bold mt-2">
+                      {formatGrowthRate(company.financials.grossProfitGrowth || yearlyData[0]?.grossProfitGrowth)}
+                    </p>
+                  </div>
+                  
+                  <div className="text-center">
+                    <p className="text-gray-700 font-medium">Net Income Growth</p>
+                    <p className="text-3xl font-bold mt-2">
+                      {formatGrowthRate(company.financials.netIncomeGrowth || yearlyData[0]?.netIncomeGrowth)}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -294,36 +445,130 @@ const CompanyDetailsPage = () => {
         
         {yearlyData.length > 0 && (
           <div className="mt-8">
-            <h2 className="text-xl font-semibold mb-4">Historical Financial Data</h2>
+            <h2 className="text-xl font-semibold mb-4">Historical Financial Data & Growth</h2>
             <div className="overflow-x-auto">
               <table className="min-w-full bg-white border border-gray-200 rounded">
                 <thead>
                   <tr className="bg-gray-50">
                     <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
                     <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                    <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">YoY Growth</th>
                     <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Profit</th>
+                    <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">YoY Growth</th>
                     <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Income</th>
-                    <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">EPS</th>
+                    <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">YoY Growth</th>
                     <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap</th>
-                    <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MktCap/Net Inc</th>
-                    <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MktCap/Gross</th>
                   </tr>
                 </thead>
                 <tbody>
                   {yearlyData.map((yearData, index) => (
                     <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="py-3 px-4 border-b border-gray-200">{yearData.year}</td>
+                      <td className="py-3 px-4 border-b border-gray-200 font-medium">{yearData.year}</td>
                       <td className="py-3 px-4 border-b border-gray-200">{formatCurrency(yearData.revenue)}</td>
+                      <td className="py-3 px-4 border-b border-gray-200 font-medium">{formatGrowthRate(yearData.revenueGrowth)}</td>
                       <td className="py-3 px-4 border-b border-gray-200">{formatCurrency(yearData.grossProfit)}</td>
+                      <td className="py-3 px-4 border-b border-gray-200 font-medium">{formatGrowthRate(yearData.grossProfitGrowth)}</td>
                       <td className="py-3 px-4 border-b border-gray-200">{formatCurrency(yearData.netIncome)}</td>
-                      <td className="py-3 px-4 border-b border-gray-200">{yearData.eps || 'N/A'}</td>
+                      <td className="py-3 px-4 border-b border-gray-200 font-medium">{formatGrowthRate(yearData.netIncomeGrowth)}</td>
                       <td className="py-3 px-4 border-b border-gray-200">{formatCurrency(yearData.marketCap)}</td>
-                      <td className="py-3 px-4 border-b border-gray-200 font-medium">{formatMultiple(yearData.marketCapToNetIncomeMultiple)}</td>
-                      <td className="py-3 px-4 border-b border-gray-200 font-medium">{formatMultiple(yearData.marketCapToGrossProfitMultiple)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+        
+        
+        {yearlyData.length > 1 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold mb-4">Growth Visualization</h2>
+            <div className="p-4 bg-white border border-gray-200 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Revenue Growth Chart - Simplified Bar Representation */}
+                <div className="border p-4 rounded-lg">
+                  <h3 className="text-lg font-medium mb-2 text-center">Revenue Growth</h3>
+                  <div className="space-y-2">
+                    {yearlyData.slice(0, 5).map((year, index) => {
+                      const growthValue = parseFloat(year.revenueGrowth || 0);
+                      const barWidth = Math.min(Math.abs(growthValue), 100);
+                      const barColor = growthValue >= 0 ? 'bg-green-500' : 'bg-red-500';
+                      const textColor = growthValue >= 0 ? 'text-green-600' : 'text-red-600';
+                      
+                      return (
+                        <div key={index} className="flex items-center">
+                          <span className="text-sm w-12 text-gray-600">{year.year}</span>
+                          <div className="flex-1 bg-gray-200 h-5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${barColor}`} 
+                              style={{width: `${barWidth}%`, marginLeft: growthValue < 0 ? 'auto' : '0'}}
+                            ></div>
+                          </div>
+                          <span className={`ml-2 text-sm font-bold ${textColor}`}>
+                            {growthValue > 0 ? '+' : ''}{growthValue}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                {/* Gross Profit Growth Chart */}
+                <div className="border p-4 rounded-lg">
+                  <h3 className="text-lg font-medium mb-2 text-center">Gross Profit Growth</h3>
+                  <div className="space-y-2">
+                    {yearlyData.slice(0, 5).map((year, index) => {
+                      const growthValue = parseFloat(year.grossProfitGrowth || 0);
+                      const barWidth = Math.min(Math.abs(growthValue), 100);
+                      const barColor = growthValue >= 0 ? 'bg-green-500' : 'bg-red-500';
+                      const textColor = growthValue >= 0 ? 'text-green-600' : 'text-red-600';
+                      
+                      return (
+                        <div key={index} className="flex items-center">
+                          <span className="text-sm w-12 text-gray-600">{year.year}</span>
+                          <div className="flex-1 bg-gray-200 h-5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${barColor}`} 
+                              style={{width: `${barWidth}%`, marginLeft: growthValue < 0 ? 'auto' : '0'}}
+                            ></div>
+                          </div>
+                          <span className={`ml-2 text-sm font-bold ${textColor}`}>
+                            {growthValue > 0 ? '+' : ''}{growthValue}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                {/* Net Income Growth Chart */}
+                <div className="border p-4 rounded-lg">
+                  <h3 className="text-lg font-medium mb-2 text-center">Net Income Growth</h3>
+                  <div className="space-y-2">
+                    {yearlyData.slice(0, 5).map((year, index) => {
+                      const growthValue = parseFloat(year.netIncomeGrowth || 0);
+                      const barWidth = Math.min(Math.abs(growthValue), 100);
+                      const barColor = growthValue >= 0 ? 'bg-green-500' : 'bg-red-500';
+                      const textColor = growthValue >= 0 ? 'text-green-600' : 'text-red-600';
+                      
+                      return (
+                        <div key={index} className="flex items-center">
+                          <span className="text-sm w-12 text-gray-600">{year.year}</span>
+                          <div className="flex-1 bg-gray-200 h-5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${barColor}`} 
+                              style={{width: `${barWidth}%`, marginLeft: growthValue < 0 ? 'auto' : '0'}}
+                            ></div>
+                          </div>
+                          <span className={`ml-2 text-sm font-bold ${textColor}`}>
+                            {growthValue > 0 ? '+' : ''}{growthValue}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

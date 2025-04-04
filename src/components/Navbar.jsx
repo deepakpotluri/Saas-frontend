@@ -9,7 +9,7 @@ const Navbar = () => {
         <div className="flex justify-between h-16">
           <div className="flex-shrink-0 flex items-center">
             <span className="text-xl font-bold text-gray-700 transition-all duration-300 hover:text-gray-900 cursor-pointer transform hover:scale-105">
-              SaaS Multiples
+               Super Saas Multiples
             </span>
           </div>
           <div className="hidden md:flex md:items-center md:space-x-8">
