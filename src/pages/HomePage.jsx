@@ -127,44 +127,85 @@ const HomePage = ({ initialState, onStateChange }) => {
       setLoading(true);
       setError(null);
       
+      // Fetch the basic company list
       const data = await fetchCompanies(
         country, 
         category !== 'All' ? category : null
       );
       
-      if (data && data.companies) {
-        // Set companies initially
-        setCompanies(data.companies);
-        setStateChanged(true);
-        
-        // Only process detailed financials for US companies
-        if (country.includes('United States')) {
-          // Process each company to get growth data
-          const enhancedCompanies = [];
-          
-          for (const company of data.companies) {
-            const enhancedCompany = await processFinancialData(company);
-            enhancedCompanies.push(enhancedCompany);
-            
-            // Update the companies state incrementally as each company is processed
-            setCompanies(prevCompanies => {
-              const updatedCompanies = [...prevCompanies];
-              const index = updatedCompanies.findIndex(c => c.ticker === enhancedCompany.ticker);
-              if (index !== -1) {
-                updatedCompanies[index] = enhancedCompany;
-              }
-              return updatedCompanies;
-            });
-          }
-        }
-      } else {
+      if (!data || !data.companies) {
         setCompanies([]);
         setError('Failed to load companies: Invalid data format');
+        setLoading(false);
+        return;
       }
+      
+      // Show companies right away
+      setCompanies(data.companies);
+      
+      // For US companies only, load all financial data in parallel
+      if (country.includes('United States')) {
+        try {
+          // Create promises for all companies' financial data
+          const promises = data.companies.map(company => 
+            fetchCompanyFinancials(company.ticker)
+              .then(financialData => {
+                if (financialData && financialData.income_statement && financialData.income_statement.length > 0) {
+                  // Sort statements by date (descending)
+                  const sortedStatements = [...financialData.income_statement].sort(
+                    (a, b) => new Date(b.date) - new Date(a.date)
+                  );
+                  
+                  // Get the latest income statement
+                  const latestStatement = sortedStatements[0];
+                  
+                  // Calculate growth rates if possible
+                  let growthRates = {
+                    revenueGrowth: null,
+                    grossProfitGrowth: null,
+                    netIncomeGrowth: null
+                  };
+                  
+                  if (sortedStatements.length > 1) {
+                    growthRates = calculateGrowthRates(financialData.income_statement);
+                  }
+                  
+                  // Return enhanced company data
+                  return {
+                    ...company,
+                    financials: {
+                      ...company.financials,
+                      revenue: latestStatement.revenue,
+                      grossProfit: latestStatement.grossProfit,
+                      netIncome: latestStatement.netIncome,
+                      revenueGrowth: growthRates.revenueGrowth,
+                      grossProfitGrowth: growthRates.grossProfitGrowth,
+                      netIncomeGrowth: growthRates.netIncomeGrowth,
+                      year: latestStatement.calendarYear
+                    }
+                  };
+                }
+                return company;
+              })
+              .catch(() => company) // Return original company if there's an error
+          );
+          
+          // Execute all promises in parallel
+          const results = await Promise.all(promises);
+          
+          // Update all companies at once
+          setCompanies(results);
+          setStateChanged(true);
+        } catch (error) {
+          console.error('Error loading detailed financial data:', error);
+        }
+      }
+      
+      setLoading(false);
     } catch (err) {
+      console.error('Error in loadCompanies:', err);
       setError('Failed to load companies data');
       setCompanies([]);
-    } finally {
       setLoading(false);
     }
   }, []);
@@ -344,8 +385,8 @@ const HomePage = ({ initialState, onStateChange }) => {
                 </td>
                 <td className="py-3 px-4 border-b border-gray-200 text-sm font-medium">
                   {formatCurrency(
-                    // Access revenue from company.financials which should now have it from detailed fetch
-                    company.financials && company.financials.revenue
+                    // Access revenue from company.financials
+                    company.financials?.revenue || 'N/A'
                   )}
                 </td>
                 <td className="py-3 px-4 border-b border-gray-200 text-sm font-medium">
@@ -558,12 +599,7 @@ const HomePage = ({ initialState, onStateChange }) => {
               
               <div className="text-sm text-gray-500">
                 Click on a company to view detailed financial information
-                <div className="text-sm text-black">
-                The below Data is updated on 04-04-2025
-              
               </div>
-              </div>
-              
             </div>
             
             {viewMode === 'table' ? renderTableView() : renderCardView()}
