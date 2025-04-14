@@ -51,43 +51,73 @@ const CompanyDetailsPage = () => {
         
         // If we don't have the company info from navigation state
         if (!company) {
+          // Extract revenue, profit and income directly from the data
+          const revenue = data.raw_values?.current_revenue || data.current_revenue;
+          const grossProfit = data.raw_values?.current_grossProfit || data.current_grossProfit;
+          const netIncome = data.raw_values?.current_netIncome || data.current_netIncome;
+          
           // Basic company info extraction from financial data
           setCompany({
             name: data.name || ticker,
             ticker: ticker,
             focus: data.focus || 'N/A',
-            financials: processFinancials(data)
+            financials: {
+              marketCap: data.market_cap,
+              revenue: revenue,
+              revenueGrowth: data.growth_metrics?.revenue_growth_pct?.toFixed(1),
+              netIncome: netIncome,
+              netIncomeGrowth: data.growth_metrics?.net_income_growth_pct?.toFixed(1),
+              grossProfit: grossProfit,
+              grossProfitGrowth: data.growth_metrics?.gross_profit_growth_pct?.toFixed(1),
+              marketCapToRevenueMultiple: data.valuation_multiples_raw?.marketcap_to_revenue?.toFixed(2),
+              marketCapToNetIncomeMultiple: data.valuation_multiples_raw?.marketcap_to_netincome?.toFixed(2),
+              marketCapToGrossProfitMultiple: data.valuation_multiples_raw?.marketcap_to_grossprofit?.toFixed(2),
+              year: data.latest_fiscal_year
+            }
+          });
+          
+          console.log("Company data extracted:", {
+            revenue, 
+            grossProfit, 
+            netIncome
           });
         }
         
         // Process yearly data for display
         if (data.income_statement && data.income_statement.length > 0) {
-          // Sort statements by date for calculations
+          // Sort statements by date for display
           const sortedStatements = [...data.income_statement].sort(
-            (a, b) => new Date(a.date) - new Date(b.date)
+            (a, b) => new Date(b.date) - new Date(a.date)
           );
           
-          // Calculate YoY growth for each year
+          // Process yearly data
           const processedYearlyData = sortedStatements.map((statement, index) => {
-            const prevYear = index > 0 ? sortedStatements[index - 1] : null;
+            const prevYear = index < sortedStatements.length - 1 ? sortedStatements[index + 1] : null;
             
-            // Calculate YoY growth rates
-            const revenueGrowth = prevYear && prevYear.revenue 
-              ? ((statement.revenue - prevYear.revenue) / prevYear.revenue * 100).toFixed(2)
-              : null;
-              
-            const grossProfitGrowth = prevYear && prevYear.grossProfit 
-              ? ((statement.grossProfit - prevYear.grossProfit) / prevYear.grossProfit * 100).toFixed(2)
-              : null;
-              
-            const netIncomeGrowth = prevYear && prevYear.netIncome 
-              ? ((statement.netIncome - prevYear.netIncome) / prevYear.netIncome * 100).toFixed(2)
-              : null;
+            // For the most recent year, use pre-calculated growth metrics
+            let revenueGrowth = null;
+            let grossProfitGrowth = null;
+            let netIncomeGrowth = null;
             
-            const relevantMarketCap = data.market_cap && data.market_cap.length > 0 
-              ? findClosestMarketCap(statement.date, data.market_cap)
-              : null;
-              
+            if (index === 0) {
+              revenueGrowth = data.growth_metrics?.revenue_growth_pct?.toFixed(2);
+              grossProfitGrowth = data.growth_metrics?.gross_profit_growth_pct?.toFixed(2);
+              netIncomeGrowth = data.growth_metrics?.net_income_growth_pct?.toFixed(2);
+            } else if (prevYear) {
+              // For previous years, calculate on-the-fly
+              revenueGrowth = prevYear.revenue && prevYear.revenue !== 0
+                ? ((statement.revenue - prevYear.revenue) / Math.abs(prevYear.revenue) * 100).toFixed(2)
+                : null;
+                
+              grossProfitGrowth = prevYear.grossProfit && prevYear.grossProfit !== 0
+                ? ((statement.grossProfit - prevYear.grossProfit) / Math.abs(prevYear.grossProfit) * 100).toFixed(2)
+                : null;
+                
+              netIncomeGrowth = prevYear.netIncome && prevYear.netIncome !== 0
+                ? ((statement.netIncome - prevYear.netIncome) / Math.abs(prevYear.netIncome) * 100).toFixed(2)
+                : null;
+            }
+            
             return {
               year: statement.calendarYear,
               date: statement.date,
@@ -97,33 +127,22 @@ const CompanyDetailsPage = () => {
               grossProfitGrowth,
               netIncome: statement.netIncome,
               netIncomeGrowth,
-              eps: statement.epsdiluted,
-              marketCap: relevantMarketCap ? relevantMarketCap.marketCap : null,
-              marketCapToNetIncomeMultiple: relevantMarketCap && statement.netIncome 
-                ? (relevantMarketCap.marketCap / statement.netIncome).toFixed(2)
-                : null,
-              marketCapToGrossProfitMultiple: relevantMarketCap && statement.grossProfit 
-                ? (relevantMarketCap.marketCap / statement.grossProfit).toFixed(2)
-                : null
+              eps: statement.epsdiluted
+              // Removed marketCap and related multiples
             };
           });
           
-          // Sort by date descending for display
-          processedYearlyData.sort((a, b) => new Date(b.date) - new Date(a.date));
           setYearlyData(processedYearlyData);
           
-          // Get the latest year's growth for the summary section
-          if (processedYearlyData.length > 0) {
-            const latestData = processedYearlyData[0];
-            setGrowthData({
-              revenueGrowth: latestData.revenueGrowth,
-              grossProfitGrowth: latestData.grossProfitGrowth,
-              netIncomeGrowth: latestData.netIncomeGrowth
-            });
-            
-            // Extract latest two years data for the YoY comparison
-            setLatestTwoYearsData(processedYearlyData.slice(0, 2));
-          }
+          // Set growth data directly from pre-calculated metrics
+          setGrowthData({
+            revenueGrowth: data.growth_metrics?.revenue_growth_pct?.toFixed(1),
+            grossProfitGrowth: data.growth_metrics?.gross_profit_growth_pct?.toFixed(1),
+            netIncomeGrowth: data.growth_metrics?.net_income_growth_pct?.toFixed(1)
+          });
+          
+          // Extract latest two years data for the YoY comparison
+          setLatestTwoYearsData(processedYearlyData.slice(0, 2));
         }
       } catch (err) {
         console.error(`Error loading data for ${ticker}:`, err);
@@ -143,86 +162,6 @@ const CompanyDetailsPage = () => {
     
     loadCompanyData();
   }, [ticker, company]);
-  
-  const findClosestMarketCap = (statementDate, marketCapArray) => {
-    if (!marketCapArray || marketCapArray.length === 0) return null;
-    
-    const statementDateObj = new Date(statementDate);
-    let closestMarketCap = marketCapArray[0];
-    let smallestDiff = Math.abs(new Date(marketCapArray[0].date) - statementDateObj);
-    
-    for (let i = 1; i < marketCapArray.length; i++) {
-      const currentDiff = Math.abs(new Date(marketCapArray[i].date) - statementDateObj);
-      if (currentDiff < smallestDiff) {
-        smallestDiff = currentDiff;
-        closestMarketCap = marketCapArray[i];
-      }
-    }
-    
-    return closestMarketCap;
-  };
-  
-  const processFinancials = (data) => {
-    if (!data || !data.income_statement || data.income_statement.length === 0) {
-      return null;
-    }
-    
-    // Sort income statements for YoY calculations - by date ascending
-    const sortedStatements = [...data.income_statement].sort(
-      (a, b) => new Date(a.date) - new Date(b.date)
-    );
-    
-    // Get latest income statement
-    const latestIncomeStatement = sortedStatements[sortedStatements.length - 1];
-    
-    // Get previous year's statement for growth calculation
-    const previousYearStatement = sortedStatements.length > 1 
-      ? sortedStatements[sortedStatements.length - 2]
-      : null;
-    
-    // Calculate YoY growth rates - ensure we have real values and avoid division by zero
-    let revenueGrowth = null;
-    if (previousYearStatement && previousYearStatement.revenue && previousYearStatement.revenue !== 0) {
-      revenueGrowth = ((latestIncomeStatement.revenue - previousYearStatement.revenue) / Math.abs(previousYearStatement.revenue) * 100).toFixed(2);
-    }
-      
-    let grossProfitGrowth = null;
-    if (previousYearStatement && previousYearStatement.grossProfit && previousYearStatement.grossProfit !== 0) {
-      grossProfitGrowth = ((latestIncomeStatement.grossProfit - previousYearStatement.grossProfit) / Math.abs(previousYearStatement.grossProfit) * 100).toFixed(2);
-    }
-      
-    let netIncomeGrowth = null;
-    if (previousYearStatement && previousYearStatement.netIncome && previousYearStatement.netIncome !== 0) {
-      netIncomeGrowth = ((latestIncomeStatement.netIncome - previousYearStatement.netIncome) / Math.abs(previousYearStatement.netIncome) * 100).toFixed(2);
-    }
-    
-    // Get latest market cap
-    let latestMarketCap = null;
-    if (data.market_cap && data.market_cap.length > 0) {
-      latestMarketCap = data.market_cap.sort((a, b) => 
-        new Date(b.date) - new Date(a.date)
-      )[0];
-    }
-    
-    // Handle cases where we might not have both data points
-    const marketCap = latestMarketCap ? latestMarketCap.marketCap : null;
-    const netIncome = latestIncomeStatement ? latestIncomeStatement.netIncome : null;
-    const grossProfit = latestIncomeStatement ? latestIncomeStatement.grossProfit : null;
-    const revenue = latestIncomeStatement ? latestIncomeStatement.revenue : null;
-    
-    return {
-      marketCap,
-      revenue,
-      revenueGrowth,
-      netIncome,
-      netIncomeGrowth,
-      grossProfit,
-      grossProfitGrowth,
-      marketCapToNetIncomeMultiple: (marketCap && netIncome) ? (marketCap / netIncome).toFixed(2) : null,
-      marketCapToGrossProfitMultiple: (marketCap && grossProfit) ? (marketCap / grossProfit).toFixed(2) : null,
-      year: latestIncomeStatement ? latestIncomeStatement.calendarYear : null
-    };
-  };
   
   const formatCurrency = (value) => {
     if (!value && value !== 0) return 'N/A';
@@ -406,21 +345,21 @@ const CompanyDetailsPage = () => {
                   <div className="text-center">
                     <p className="text-gray-700 font-medium">Revenue Growth</p>
                     <p className="text-3xl font-bold mt-2">
-                      {formatGrowthRate(company.financials.revenueGrowth || yearlyData[0]?.revenueGrowth)}
+                      {formatGrowthRate(company.financials.revenueGrowth || growthData.revenueGrowth)}
                     </p>
                   </div>
                   
                   <div className="text-center">
                     <p className="text-gray-700 font-medium">Gross Profit Growth</p>
                     <p className="text-3xl font-bold mt-2">
-                      {formatGrowthRate(company.financials.grossProfitGrowth || yearlyData[0]?.grossProfitGrowth)}
+                      {formatGrowthRate(company.financials.grossProfitGrowth || growthData.grossProfitGrowth)}
                     </p>
                   </div>
                   
                   <div className="text-center">
                     <p className="text-gray-700 font-medium">Net Income Growth</p>
                     <p className="text-3xl font-bold mt-2">
-                      {formatGrowthRate(company.financials.netIncomeGrowth || yearlyData[0]?.netIncomeGrowth)}
+                      {formatGrowthRate(company.financials.netIncomeGrowth || growthData.netIncomeGrowth)}
                     </p>
                   </div>
                 </div>
@@ -429,14 +368,18 @@ const CompanyDetailsPage = () => {
             
             <div>
               <h2 className="text-xl font-semibold mb-4">Valuation Multiples</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-amber-50 p-4 rounded-lg">
-                  <p className="text-gray-600">Market Cap / Net Income</p>
-                  <p className="text-2xl font-bold">{formatMultiple(company.financials.marketCapToNetIncomeMultiple)}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <p className="text-gray-600">Market Cap / Revenue</p>
+                  <p className="text-2xl font-bold">{formatMultiple(company.financials.marketCapToRevenueMultiple)}</p>
                 </div>
                 <div className="bg-teal-50 p-4 rounded-lg">
                   <p className="text-gray-600">Market Cap / Gross Profit</p>
                   <p className="text-2xl font-bold">{formatMultiple(company.financials.marketCapToGrossProfitMultiple)}</p>
+                </div>
+                <div className="bg-amber-50 p-4 rounded-lg">
+                  <p className="text-gray-600">Market Cap / Net Income</p>
+                  <p className="text-2xl font-bold">{formatMultiple(company.financials.marketCapToNetIncomeMultiple)}</p>
                 </div>
               </div>
             </div>
@@ -457,7 +400,6 @@ const CompanyDetailsPage = () => {
                     <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">YoY Growth</th>
                     <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Income</th>
                     <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">YoY Growth</th>
-                    <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -470,7 +412,6 @@ const CompanyDetailsPage = () => {
                       <td className="py-3 px-4 border-b border-gray-200 font-medium">{formatGrowthRate(yearData.grossProfitGrowth)}</td>
                       <td className="py-3 px-4 border-b border-gray-200">{formatCurrency(yearData.netIncome)}</td>
                       <td className="py-3 px-4 border-b border-gray-200 font-medium">{formatGrowthRate(yearData.netIncomeGrowth)}</td>
-                      <td className="py-3 px-4 border-b border-gray-200">{formatCurrency(yearData.marketCap)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -678,6 +619,31 @@ const CompanyDetailsPage = () => {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+            
+            {/* Valuation Metrics */}
+            {financialData.valuation_multiples && (
+              <div className="bg-white border border-gray-200 rounded-lg mt-6">
+                <div className="bg-amber-50 px-4 py-3 border-b border-gray-200">
+                  <h3 className="font-medium text-amber-800">Valuation Metrics</h3>
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-gray-600 text-sm mb-1">Market Cap to Revenue</p>
+                      <p className="text-xl font-bold text-gray-800">{financialData.valuation_multiples.marketcap_to_revenue || 'N/A'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-gray-600 text-sm mb-1">Market Cap to Gross Profit</p>
+                      <p className="text-xl font-bold text-gray-800">{financialData.valuation_multiples.marketcap_to_grossprofit || 'N/A'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-gray-600 text-sm mb-1">Market Cap to Net Income</p>
+                      <p className="text-xl font-bold text-gray-800">{financialData.valuation_multiples.marketcap_to_netincome || 'N/A'}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

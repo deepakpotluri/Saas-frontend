@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CountryDropdown from '../components/CountryDropdown';
 import CategoryDropdown from '../components/CategoryDropdown';
-import CompanyList from '../components/CompanyList';
 import EmailNotificationForm from '../components/EmailNotificatonForm';
-import { fetchCompanies, fetchCompanyFinancials } from '../services/api';
+import { fetchCompanies } from '../services/api';
 import { trackCompanyView } from '../utils/analytics';
 
 const HomePage = ({ initialState, onStateChange }) => {
@@ -22,102 +21,17 @@ const HomePage = ({ initialState, onStateChange }) => {
   const [hasInitialized, setHasInitialized] = useState(false);
   const [showNotificationForm, setShowNotificationForm] = useState(false);
   const [viewMode, setViewMode] = useState('table'); // 'table' or 'cards'
+  const [columnWidths, setColumnWidths] = useState({
+    col1: 200, // company name
+    col2: 100, // ticker
+    col3: 150  // focus
+  });
 
   // Extract exchange from name function
   const extractExchangeFromName = useCallback((countryName) => {
     const match = countryName.match(/\((.*?)\)/);
     return match ? match[1] : 'Unknown Exchange';
   }, []);
-
-  // Calculate growth rates from income statements
-  const calculateGrowthRates = (incomeStatements) => {
-    if (!incomeStatements || incomeStatements.length < 2) {
-      return {
-        revenueGrowth: null,
-        grossProfitGrowth: null,
-        netIncomeGrowth: null
-      };
-    }
-    
-    // Sort statements by date (ascending)
-    const sortedStatements = [...incomeStatements].sort(
-      (a, b) => new Date(a.date) - new Date(b.date)
-    );
-    
-    // Get the latest two years for comparison
-    const latestYear = sortedStatements[sortedStatements.length - 1];
-    const previousYear = sortedStatements[sortedStatements.length - 2];
-    
-    // Calculate YoY growth rates
-    let revenueGrowth = null;
-    if (previousYear.revenue && previousYear.revenue !== 0) {
-      revenueGrowth = ((latestYear.revenue - previousYear.revenue) / Math.abs(previousYear.revenue) * 100).toFixed(1);
-    }
-    
-    let grossProfitGrowth = null;
-    if (previousYear.grossProfit && previousYear.grossProfit !== 0) {
-      grossProfitGrowth = ((latestYear.grossProfit - previousYear.grossProfit) / Math.abs(previousYear.grossProfit) * 100).toFixed(1);
-    }
-    
-    let netIncomeGrowth = null;
-    if (previousYear.netIncome && previousYear.netIncome !== 0) {
-      netIncomeGrowth = ((latestYear.netIncome - previousYear.netIncome) / Math.abs(previousYear.netIncome) * 100).toFixed(1);
-    }
-    
-    return {
-      revenueGrowth,
-      grossProfitGrowth,
-      netIncomeGrowth
-    };
-  };
-
-  // Process financial data for a company
-  const processFinancialData = async (company) => {
-    try {
-      const financialData = await fetchCompanyFinancials(company.ticker);
-      
-      if (financialData && financialData.income_statement && financialData.income_statement.length > 0) {
-        // Sort income statements by date (descending)
-        const sortedStatements = [...financialData.income_statement].sort(
-          (a, b) => new Date(b.date) - new Date(a.date)
-        );
-        
-        // Get the latest income statement for revenue and other data
-        const latestStatement = sortedStatements[0];
-        
-        // Calculate growth rates if we have more than one statement
-        let growthRates = {
-          revenueGrowth: null,
-          grossProfitGrowth: null,
-          netIncomeGrowth: null
-        };
-        
-        if (sortedStatements.length > 1) {
-          growthRates = calculateGrowthRates(financialData.income_statement);
-        }
-        
-        // Update company financials with revenue and growth rates
-        return {
-          ...company,
-          financials: {
-            ...company.financials,
-            revenue: latestStatement.revenue,
-            grossProfit: latestStatement.grossProfit,
-            netIncome: latestStatement.netIncome,
-            revenueGrowth: growthRates.revenueGrowth,
-            grossProfitGrowth: growthRates.grossProfitGrowth,
-            netIncomeGrowth: growthRates.netIncomeGrowth,
-            year: latestStatement.calendarYear
-          }
-        };
-      }
-      
-      return company;
-    } catch (error) {
-      console.error(`Error fetching financial data for ${company.ticker}:`, error);
-      return company;
-    }
-  };
 
   // Load companies function
   const loadCompanies = useCallback(async (country, category) => {
@@ -127,7 +41,7 @@ const HomePage = ({ initialState, onStateChange }) => {
       setLoading(true);
       setError(null);
       
-      // Fetch the basic company list
+      // Fetch the company list along with financial data from API
       const data = await fetchCompanies(
         country, 
         category !== 'All' ? category : null
@@ -140,68 +54,50 @@ const HomePage = ({ initialState, onStateChange }) => {
         return;
       }
       
-      // Show companies right away
-      setCompanies(data.companies);
+      // Process the companies data to ensure the financial structure matches CompanyDetailsPage
+      const processedCompanies = data.companies.map(company => {
+        // Skip processing if financials is missing completely
+        if (!company.financials) return company;
+        
+        // Extract financial data exactly like in CompanyDetailsPage
+        const financialsData = company.financials;
+        
+        // Extract revenue, profit and income directly from the data - match CompanyDetailsPage exactly
+        const revenue = financialsData.raw_values?.current_revenue || financialsData.current_revenue || financialsData.revenue;
+        const grossProfit = financialsData.raw_values?.current_grossProfit || financialsData.current_grossProfit || financialsData.grossProfit;
+        const netIncome = financialsData.raw_values?.current_netIncome || financialsData.current_netIncome || financialsData.netIncome;
+        const marketCap = financialsData.market_cap || financialsData.marketCap;
+        
+        // Create a new financials object with the exact same structure as CompanyDetailsPage
+        const standardizedFinancials = {
+          marketCap: marketCap,
+          revenue: revenue,
+          revenueGrowth: financialsData.growth_metrics?.revenue_growth_pct?.toFixed(1) || financialsData.revenueGrowth,
+          netIncome: netIncome,
+          netIncomeGrowth: financialsData.growth_metrics?.net_income_growth_pct?.toFixed(1) || financialsData.netIncomeGrowth,
+          grossProfit: grossProfit,
+          grossProfitGrowth: financialsData.growth_metrics?.gross_profit_growth_pct?.toFixed(1) || financialsData.grossProfitGrowth,
+          marketCapToRevenueMultiple: financialsData.valuation_multiples_raw?.marketcap_to_revenue?.toFixed(2) || financialsData.marketCapToRevenueMultiple,
+          marketCapToNetIncomeMultiple: financialsData.valuation_multiples_raw?.marketcap_to_netincome?.toFixed(2) || financialsData.marketCapToNetIncomeMultiple,
+          marketCapToGrossProfitMultiple: financialsData.valuation_multiples_raw?.marketcap_to_grossprofit?.toFixed(2) || financialsData.marketCapToGrossProfitMultiple,
+          year: financialsData.latest_fiscal_year || financialsData.year
+        };
+        
+        // Return the company with standardized financials
+        return {
+          ...company,
+          financials: standardizedFinancials
+        };
+      });
       
-      // For US companies only, load all financial data in parallel
-      if (country.includes('United States')) {
-        try {
-          // Create promises for all companies' financial data
-          const promises = data.companies.map(company => 
-            fetchCompanyFinancials(company.ticker)
-              .then(financialData => {
-                if (financialData && financialData.income_statement && financialData.income_statement.length > 0) {
-                  // Sort statements by date (descending)
-                  const sortedStatements = [...financialData.income_statement].sort(
-                    (a, b) => new Date(b.date) - new Date(a.date)
-                  );
-                  
-                  // Get the latest income statement
-                  const latestStatement = sortedStatements[0];
-                  
-                  // Calculate growth rates if possible
-                  let growthRates = {
-                    revenueGrowth: null,
-                    grossProfitGrowth: null,
-                    netIncomeGrowth: null
-                  };
-                  
-                  if (sortedStatements.length > 1) {
-                    growthRates = calculateGrowthRates(financialData.income_statement);
-                  }
-                  
-                  // Return enhanced company data
-                  return {
-                    ...company,
-                    financials: {
-                      ...company.financials,
-                      revenue: latestStatement.revenue,
-                      grossProfit: latestStatement.grossProfit,
-                      netIncome: latestStatement.netIncome,
-                      revenueGrowth: growthRates.revenueGrowth,
-                      grossProfitGrowth: growthRates.grossProfitGrowth,
-                      netIncomeGrowth: growthRates.netIncomeGrowth,
-                      year: latestStatement.calendarYear
-                    }
-                  };
-                }
-                return company;
-              })
-              .catch(() => company) // Return original company if there's an error
-          );
-          
-          // Execute all promises in parallel
-          const results = await Promise.all(promises);
-          
-          // Update all companies at once
-          setCompanies(results);
-          setStateChanged(true);
-        } catch (error) {
-          console.error('Error loading detailed financial data:', error);
-        }
-      }
+      // Log to troubleshoot financial data
+      console.log('Processed companies:', processedCompanies);
       
+      // Set the processed companies
+      setCompanies(processedCompanies);
       setLoading(false);
+      setStateChanged(true);
+      
     } catch (err) {
       console.error('Error in loadCompanies:', err);
       setError('Failed to load companies data');
@@ -298,7 +194,7 @@ const HomePage = ({ initialState, onStateChange }) => {
 
   // Format currency for display
   const formatCurrency = (value) => {
-    if (!value && value !== 0) return 'N/A';
+    if (value === null || value === undefined || value === '') return 'N/A';
     
     // Convert to billions for readability
     const billion = 1000000000;
@@ -317,14 +213,14 @@ const HomePage = ({ initialState, onStateChange }) => {
   
   // Format multiple for display
   const formatMultiple = (value) => {
-    if (!value && value !== 0) return 'N/A';
+    if (value === null || value === undefined || value === '') return 'N/A';
     return `${value}x`;
   };
   
   // Format growth rate for display
   const formatGrowthRate = (value) => {
     // Check if value is null, undefined, or NaN
-    if (value === null || value === undefined || isNaN(parseFloat(value))) {
+    if (value === null || value === undefined || value === '' || isNaN(parseFloat(value))) {
       return 'N/A';
     }
     
@@ -346,82 +242,181 @@ const HomePage = ({ initialState, onStateChange }) => {
     navigate(`/company/${company.ticker}`, { state: { company } });
   };
 
-  // Render table view
+  // Render table view with fixed first three columns
   const renderTableView = () => {
+    // CSS for the table with fixed columns
+    const tableStyle = `
+      .fixed-table-container {
+        width: 100%;
+        overflow-x: auto;
+      }
+      
+      .fixed-table {
+        width: max-content;
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+      
+      .fixed-table th:nth-child(-n+3),
+      .fixed-table td:nth-child(-n+3) {
+        position: sticky;
+        z-index: 1;
+      }
+      
+      /* Set explicit left positions for each fixed column */
+      .fixed-table th:nth-child(1),
+      .fixed-table td:nth-child(1) {
+        left: 0;
+      }
+      
+      .fixed-table th:nth-child(2),
+      .fixed-table td:nth-child(2) {
+        left: ${columnWidths.col1}px;
+      }
+      
+      .fixed-table th:nth-child(3),
+      .fixed-table td:nth-child(3) {
+        left: ${columnWidths.col1 + columnWidths.col2}px;
+      }
+      
+      /* Background colors for fixed columns */
+      .fixed-table thead th:nth-child(-n+3) {
+        background-color: #f9fafb; /* bg-gray-50 equivalent */
+        z-index: 2; /* Higher z-index for header cells */
+      }
+      
+      .fixed-table tbody tr:nth-child(odd) td:nth-child(-n+3) {
+        background-color: white;
+      }
+      
+      .fixed-table tbody tr:nth-child(even) td:nth-child(-n+3) {
+        background-color: #f9fafb; /* bg-gray-50 equivalent */
+      }
+      
+      /* Hover state for fixed columns */
+      .fixed-table tbody tr:hover td:nth-child(-n+3) {
+        background-color: #ebf5ff; /* hover:bg-blue-50 equivalent */
+      }
+      
+      /* Add a shadow to the last fixed column */
+      .fixed-table th:nth-child(3),
+      .fixed-table td:nth-child(3) {
+        box-shadow: 4px 0 6px -2px rgba(0,0,0,0.1);
+      }
+      
+      /* Ensure borders look right with separate cells */
+      .fixed-table th, 
+      .fixed-table td {
+        border-bottom: 1px solid #e5e7eb; /* border-gray-200 */
+        border-right: 1px solid #e5e7eb;
+      }
+      
+      .fixed-table th:last-child,
+      .fixed-table td:last-child {
+        border-right: none;
+      }
+      
+      /* Fixed width for columns */
+      .fixed-table th:nth-child(1),
+      .fixed-table td:nth-child(1) {
+        width: ${columnWidths.col1}px;
+        min-width: ${columnWidths.col1}px;
+        max-width: ${columnWidths.col1}px;
+      }
+      
+      .fixed-table th:nth-child(2),
+      .fixed-table td:nth-child(2) {
+        width: ${columnWidths.col2}px;
+        min-width: ${columnWidths.col2}px;
+        max-width: ${columnWidths.col2}px;
+      }
+      
+      .fixed-table th:nth-child(3),
+      .fixed-table td:nth-child(3) {
+        width: ${columnWidths.col3}px;
+        min-width: ${columnWidths.col3}px;
+        max-width: ${columnWidths.col3}px;
+      }
+    `;
+    
     return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white border border-gray-200 rounded">
-          <thead>
-            <tr className="bg-gray-50">
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticker</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Focus</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue Growth</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Profit</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Profit Growth</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Income</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Income Growth</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap/Gross Profit</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap/Net Income</th>
-              <th className="py-3 px-4 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
-            </tr>
-          </thead>
-          <tbody>
-            {companies.map((company, index) => (
-              <tr 
-                key={`${company.ticker}-${index}`} 
-                className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 cursor-pointer`}
-                onClick={() => handleCompanyClick(company)}
-              >
-                <td className="py-3 px-4 border-b border-gray-200">
-                  <div className="font-medium text-blue-600 hover:underline">{company.name}</div>
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 font-mono">{company.ticker}</td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm">{company.focus}</td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm font-medium">
-                  {company.financials ? formatCurrency(company.financials.marketCap) : 'N/A'}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm font-medium">
-                  {formatCurrency(
-                    // Access revenue from company.financials
-                    company.financials?.revenue || 'N/A'
-                  )}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm font-medium">
-                  {company.financials && company.financials.revenueGrowth ? formatGrowthRate(company.financials.revenueGrowth) : 'N/A'}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm">
-                  {company.financials ? formatCurrency(company.financials.grossProfit) : 'N/A'}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm font-medium">
-                  {company.financials && company.financials.grossProfitGrowth ? formatGrowthRate(company.financials.grossProfitGrowth) : 'N/A'}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm">
-                  {company.financials ? formatCurrency(company.financials.netIncome) : 'N/A'}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm font-medium">
-                  {company.financials && company.financials.netIncomeGrowth ? formatGrowthRate(company.financials.netIncomeGrowth) : 'N/A'}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm">
-                  {company.financials ? formatMultiple(company.financials.marketCapToGrossProfitMultiple) : 'N/A'}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm">
-                  {company.financials ? formatMultiple(company.financials.marketCapToNetIncomeMultiple) : 'N/A'}
-                </td>
-                <td className="py-3 px-4 border-b border-gray-200 text-sm">
-                  {company.financials ? company.financials.year : 'N/A'}
-                </td>
+      <>
+        <style>{tableStyle}</style>
+        <div className="fixed-table-container">
+          <table className="fixed-table bg-white border border-gray-200 rounded">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticker</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Focus</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue Growth</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Profit</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Profit Growth</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Income</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Income Growth</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap/Revenue</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap/Gross Profit</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap/Net Income</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {companies.map((company, index) => (
+                <tr 
+                  key={`${company.ticker}-${index}`} 
+                  className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 cursor-pointer`}
+                  onClick={() => handleCompanyClick(company)}
+                >
+                  <td className="py-3 px-4">
+                    <div className="font-medium text-blue-600 hover:underline">{company.name}</div>
+                  </td>
+                  <td className="py-3 px-4 font-mono">{company.ticker}</td>
+                  <td className="py-3 px-4 text-sm">{company.focus}</td>
+                  <td className="py-3 px-4 text-sm font-medium">
+                    {formatCurrency(company.financials?.marketCap)}
+                  </td>
+                  <td className="py-3 px-4 text-sm font-medium">
+                    {formatCurrency(company.financials?.revenue)}
+                  </td>
+                  <td className="py-3 px-4 text-sm font-medium">
+                    {formatGrowthRate(company.financials?.revenueGrowth)}
+                  </td>
+                  <td className="py-3 px-4 text-sm">
+                    {formatCurrency(company.financials?.grossProfit)}
+                  </td>
+                  <td className="py-3 px-4 text-sm font-medium">
+                    {formatGrowthRate(company.financials?.grossProfitGrowth)}
+                  </td>
+                  <td className="py-3 px-4 text-sm">
+                    {formatCurrency(company.financials?.netIncome)}
+                  </td>
+                  <td className="py-3 px-4 text-sm font-medium">
+                    {formatGrowthRate(company.financials?.netIncomeGrowth)}
+                  </td>
+                  <td className="py-3 px-4 text-sm">
+                    {formatMultiple(company.financials?.marketCapToRevenueMultiple)}
+                  </td>
+                  <td className="py-3 px-4 text-sm">
+                    {formatMultiple(company.financials?.marketCapToGrossProfitMultiple)}
+                  </td>
+                  <td className="py-3 px-4 text-sm">
+                    {formatMultiple(company.financials?.marketCapToNetIncomeMultiple)}
+                  </td>
+                  <td className="py-3 px-4 text-sm">
+                    {company.financials?.year || 'N/A'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
     );
   };
 
-  // Render card view (existing view)
+  // Render card view
   const renderCardView = () => {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -470,25 +465,19 @@ const HomePage = ({ initialState, onStateChange }) => {
                     <div className="border border-gray-200 p-1 rounded">
                       <p className="text-xs text-gray-600">Revenue</p>
                       <p className="text-sm font-bold">
-                        {company.financials && company.financials.revenueGrowth 
-                          ? (parseFloat(company.financials.revenueGrowth) > 0 ? '+' : '') + company.financials.revenueGrowth + '%'
-                          : 'N/A'}
+                        {formatGrowthRate(company.financials.revenueGrowth)}
                       </p>
                     </div>
                     <div className="border border-gray-200 p-1 rounded">
                       <p className="text-xs text-gray-600">Gross</p>
                       <p className="text-sm font-bold">
-                        {company.financials && company.financials.grossProfitGrowth 
-                          ? (parseFloat(company.financials.grossProfitGrowth) > 0 ? '+' : '') + company.financials.grossProfitGrowth + '%'
-                          : 'N/A'}
+                        {formatGrowthRate(company.financials.grossProfitGrowth)}
                       </p>
                     </div>
                     <div className="border border-gray-200 p-1 rounded">
                       <p className="text-xs text-gray-600">Net Inc</p>
                       <p className="text-sm font-bold">
-                        {company.financials && company.financials.netIncomeGrowth 
-                          ? (parseFloat(company.financials.netIncomeGrowth) > 0 ? '+' : '') + company.financials.netIncomeGrowth + '%'
-                          : 'N/A'}
+                        {formatGrowthRate(company.financials.netIncomeGrowth)}
                       </p>
                     </div>
                   </div>
@@ -496,14 +485,24 @@ const HomePage = ({ initialState, onStateChange }) => {
                 
                 <div className="border-t border-gray-200 pt-2">
                   <h4 className="text-sm font-semibold text-gray-700 mb-1">Valuation Multiples</h4>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <div className="border border-gray-200 p-1 rounded">
-                      <p className="text-xs text-gray-600">MCap/Net Inc</p>
-                      <p className="text-sm font-bold">{formatMultiple(company.financials.marketCapToNetIncomeMultiple)}</p>
+                      <p className="text-xs text-gray-600">MCap/Rev</p>
+                      <p className="text-sm font-bold">
+                        {formatMultiple(company.financials.marketCapToRevenueMultiple)}
+                      </p>
                     </div>
                     <div className="border border-gray-200 p-1 rounded">
                       <p className="text-xs text-gray-600">MCap/Gross</p>
-                      <p className="text-sm font-bold">{formatMultiple(company.financials.marketCapToGrossProfitMultiple)}</p>
+                      <p className="text-sm font-bold">
+                        {formatMultiple(company.financials.marketCapToGrossProfitMultiple)}
+                      </p>
+                    </div>
+                    <div className="border border-gray-200 p-1 rounded">
+                      <p className="text-xs text-gray-600">MCap/Net Inc</p>
+                      <p className="text-sm font-bold">
+                        {formatMultiple(company.financials.marketCapToNetIncomeMultiple)}
+                      </p>
                     </div>
                   </div>
                 </div>
