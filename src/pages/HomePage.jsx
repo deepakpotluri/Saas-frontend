@@ -598,6 +598,9 @@ const HomePage = ({ initialState, onStateChange }) => {
               
               <div className="text-sm text-gray-500">
                 Click on a company to view detailed financial information
+                <div className="text-sm text-gray-500">
+                Data Updated on 14-04-25
+              </div>
               </div>
             </div>
             
