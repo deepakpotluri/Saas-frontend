@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { fetchCountries } from '../services/api';
 import { trackCountryFilter } from '../utils/analytics'; // Import the analytics utility
 
-const CountryDropdown = ({ onCountrySelect, initialValue = '' }) => {
+const CountryDropdown = ({ onCountrySelect, initialValue = 'United States' }) => {
   const [countries, setCountries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState('United States');
   
   // Fetch countries on component mount
   useEffect(() => {
@@ -33,8 +33,15 @@ const CountryDropdown = ({ onCountrySelect, initialValue = '' }) => {
   
   // Update selected country when initialValue changes
   useEffect(() => {
-    setSelectedCountry(initialValue || '');
+    setSelectedCountry(initialValue || 'United States');
   }, [initialValue]);
+  
+  // When countries are loaded, call onCountrySelect with the default value
+  useEffect(() => {
+    if (!loading && countries.length > 0 && selectedCountry) {
+      onCountrySelect(selectedCountry);
+    }
+  }, [loading, countries, selectedCountry, onCountrySelect]);
   
   const handleChange = (e) => {
     const country = e.target.value;

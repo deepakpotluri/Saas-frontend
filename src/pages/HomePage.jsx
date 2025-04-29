@@ -522,7 +522,7 @@ const HomePage = ({ initialState, onStateChange }) => {
           onClick={() => setShowNotificationForm(true)}
           className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
         >
-          Notify for complete data
+          Notify 
         </button>
       </div>
       

@@ -6,20 +6,52 @@ const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:5000/api'
   : 'https://saas-backend-three.vercel.app/api';
 
-const EmailNotificationForm = ({ onClose }) => {
+const EnhancedEmailNotificationForm = ({ onClose }) => {
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryCode, setCountryCode] = useState('+1');
+  const [notificationTypes, setNotificationTypes] = useState({
+    allCountries: true,
+    metricsUpdates: true
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // Common country codes for dropdown
+  const countryCodes = [
+    { code: '+1', country: 'US/Canada' },
+    { code: '+44', country: 'UK' },
+    { code: '+49', country: 'Germany' },
+    { code: '+33', country: 'France' },
+    { code: '+61', country: 'Australia' },
+    { code: '+81', country: 'Japan' },
+    { code: '+86', country: 'China' },
+    { code: '+91', country: 'India' },
+    { code: '+52', country: 'Mexico' },
+    { code: '+55', country: 'Brazil' },
+    { code: '+34', country: 'Spain' },
+    { code: '+39', country: 'Italy' },
+    { code: '+82', country: 'South Korea' },
+    { code: '+65', country: 'Singapore' },
+    { code: '+971', country: 'UAE' },
+  ];
 
   const validateEmail = (email) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const validatePhoneNumber = (phone) => {
+    // Allow empty phone (optional) or validate if provided
+    if (!phone) return true;
     
+    // Basic phone validation - can be made more sophisticated
+    const re = /^\d{6,15}$/;
+    return re.test(phone);
+  };
+
+  const handleSubmit = async () => {
     // Reset states
     setError('');
     
@@ -33,17 +65,40 @@ const EmailNotificationForm = ({ onClose }) => {
       setError('Please enter a valid email address');
       return;
     }
+
+    // Validate phone if provided
+    if (phoneNumber && !validatePhoneNumber(phoneNumber)) {
+      setError('Please enter a valid phone number (digits only)');
+      return;
+    }
+    
+    // Validate that at least one notification type is selected
+    if (!notificationTypes.allCountries && !notificationTypes.metricsUpdates) {
+      setError('Please select at least one notification preference');
+      return;
+    }
     
     setIsSubmitting(true);
     
     try {
+      // Format phone with country code if provided
+      const formattedPhone = phoneNumber ? `${countryCode}${phoneNumber}` : '';
+      
+      // Prepare subscription data
+      const subscriptionData = {
+        email,
+        phone: formattedPhone,
+        notifyAllCountries: notificationTypes.allCountries,
+        notifyMetricsUpdates: notificationTypes.metricsUpdates
+      };
+      
       // Use the dynamic API_URL instead of hardcoded URL
       const response = await fetch(`${API_URL}/notifications/subscribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email })
+        body: JSON.stringify(subscriptionData)
       });
       
       console.log('Response status:', response.status);
@@ -56,6 +111,7 @@ const EmailNotificationForm = ({ onClose }) => {
       
       setSuccess(true);
       setEmail('');
+      setPhoneNumber('');
       
       // Track the subscription event
       trackNotificationSubscription(email);
@@ -99,10 +155,11 @@ const EmailNotificationForm = ({ onClose }) => {
               Subscribe to get notified when we add complete financial data for all companies.
             </p>
             
-            <form onSubmit={handleSubmit}>
+            <div>
+              {/* Email Field */}
               <div className="mb-4">
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address
+                  Email Address <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
@@ -113,10 +170,88 @@ const EmailNotificationForm = ({ onClose }) => {
                   placeholder="your@email.com"
                   disabled={isSubmitting}
                 />
-                {error && (
-                  <p className="mt-1 text-sm text-red-600">{error}</p>
-                )}
               </div>
+              
+              {/* Phone Field with Country Code */}
+              <div className="mb-4">
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone Number <span className="text-gray-500">(Optional)</span>
+                </label>
+                <div className="flex">
+                  <select
+                    id="countryCode"
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    className="w-1/3 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    disabled={isSubmitting}
+                  >
+                    {countryCodes.map(country => (
+                      <option key={country.code} value={country.code}>
+                        {country.code} {country.country}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    id="phone"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                    className="w-2/3 px-3 py-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="Phone number"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Digits only, no spaces or special characters</p>
+              </div>
+              
+              {/* Notification Type Checkboxes */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notification Preferences
+                </label>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <input
+                      id="all-countries"
+                      name="all-countries"
+                      type="checkbox"
+                      checked={notificationTypes.allCountries}
+                      onChange={() => setNotificationTypes({
+                        ...notificationTypes,
+                        allCountries: !notificationTypes.allCountries
+                      })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      disabled={isSubmitting}
+                    />
+                    <label htmlFor="all-countries" className="ml-2 block text-sm text-gray-700">
+                      Notification for All Countries Data
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      id="metrics-update"
+                      name="metrics-update"
+                      type="checkbox"
+                      checked={notificationTypes.metricsUpdates}
+                      onChange={() => setNotificationTypes({
+                        ...notificationTypes,
+                        metricsUpdates: !notificationTypes.metricsUpdates
+                      })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      disabled={isSubmitting}
+                    />
+                    <label htmlFor="metrics-update" className="ml-2 block text-sm text-gray-700">
+                      Notify when metrics are updated
+                    </label>
+                  </div>
+                </div>
+              </div>
+              
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+                  {error}
+                </div>
+              )}
               
               <div className="flex justify-end space-x-3">
                 <button
@@ -128,7 +263,8 @@ const EmailNotificationForm = ({ onClose }) => {
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleSubmit}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   disabled={isSubmitting}
                 >
@@ -145,7 +281,7 @@ const EmailNotificationForm = ({ onClose }) => {
                   )}
                 </button>
               </div>
-            </form>
+            </div>
           </>
         )}
       </div>
@@ -153,4 +289,4 @@ const EmailNotificationForm = ({ onClose }) => {
   );
 };
 
-export default EmailNotificationForm;
+export default EnhancedEmailNotificationForm;
